@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tap Checkout Demo</title>
+  <link rel="stylesheet" href="/style.css" />
+  <!-- Tap Web Card SDK v2: tokenizes the card in the browser with the PUBLIC key -->
+  <script src="https://tap-sdks.b-cdn.net/card/1.0.2/index.js"></script>
+</head>
+<body>
+<header><b>🛒 Demo Shop</b><span class="tag">Tap TEST mode</span></header>
+
+<main>
+  <section>
+    <div class="panel">
+      <h2>1. Pick a product</h2>
+      <div class="products" id="products"></div>
+    </div>
+
+    <div class="panel" style="margin-top:20px">
+      <h2>Test cards</h2>
+      <p class="muted">Click a number to copy it. Use expiry <code>01/39</code> + CVV <code>100</code> for an approved payment,
+        or expiry <code>05/22</code> to get a decline.</p>
+      <table>
+        <tr><th>Brand</th><th>Number</th><th>3DS</th></tr>
+        <tr><td>VISA</td><td><code>4508750015741019</code></td><td>Yes</td></tr>
+        <tr><td>VISA</td><td><code>4012000033330026</code></td><td>No</td></tr>
+        <tr><td>Mastercard</td><td><code>5123450000000008</code></td><td>Yes</td></tr>
+        <tr><td>Mastercard</td><td><code>5111111111111118</code></td><td>No</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <h2>2. Pay</h2>
+    <div id="summary" class="muted">No product selected.</div>
+
+    <div id="methods" style="margin-top:12px"></div>
+
+    <div id="newCardBox">
+      <div id="card-sdk-id"></div>
+      <label class="muted"><input type="checkbox" id="saveCard" checked /> Save this card for next time</label>
+    </div>
+
+    <button class="pay" id="payBtn" disabled>Pay</button>
+    <div class="msg" id="msg"></div>
+  </aside>
+
+  <section class="panel full">
+    <h2>Recent orders</h2>
+    <table id="orders"><tr><td class="muted">No orders yet.</td></tr></table>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let cfg, selected = null, cards = [], method = 'new', cardReady = false, busy = false;
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+const money = (n) => `${Number(n).toFixed(3)} ${cfg.currency}`;
+function showMsg(text, kind = '') { $('msg').textContent = text; $('msg').className = 'msg ' + kind; }
+
+// ---------- products ----------
+function renderProducts() {
+  $('products').innerHTML = cfg.products.map(p => `
+    <div class="product ${selected && selected.id === p.id ? 'selected' : ''}" data-id="${p.id}">
+      <div class="emoji">${p.emoji}</div><div>${p.name}</div><div class="price">${money(p.price)}</div>
+    </div>`).join('');
+  document.querySelectorAll('.product').forEach(el => el.onclick = () => selectProduct(el.dataset.id));
+}
+function selectProduct(id) {
+  selected = cfg.products.find(p => p.id === id);
+  renderProducts();
+  $('summary').innerHTML = `<b>${selected.name}</b> — ${money(selected.price)}`;
+  mountCardSdk(); // amount is part of the SDK config
+  updatePayBtn();
+}
+
+// ---------- saved cards ----------
+async function loadCards() {
+  try { cards = await api('/api/cards'); } catch (e) { cards = []; showMsg('Could not load saved cards: ' + e.message, 'err'); }
+  if (method !== 'new' && !cards.find(c => c.id === method)) method = 'new';
+  renderMethods();
+}
+function renderMethods() {
+  const saved = cards.map(c => `
+    <label class="option"><input type="radio" name="method" value="${c.id}" ${method === c.id ? 'checked' : ''} />
+      💳 ${c.brand || 'Card'} •••• ${c.last4} <span class="muted">${c.exp_month}/${c.exp_year}</span>
+      <button class="del" data-id="${c.id}" title="Remove card">Remove</button></label>`).join('');
+  $('methods').innerHTML = (cards.length ? '<div class="muted" style="margin-bottom:6px">Saved cards</div>' : '') + saved + `
+    <label class="option"><input type="radio" name="method" value="new" ${method === 'new' ? 'checked' : ''} /> ➕ Pay with a new card</label>`;
+  document.querySelectorAll('input[name=method]').forEach(r => r.onchange = () => { method = r.value; toggleNewCard(); updatePayBtn(); });
+  document.querySelectorAll('.del').forEach(b => b.onclick = async (ev) => {
+    ev.preventDefault();
+    if (!confirm('Remove this saved card?')) return;
+    try { await api('/api/cards/' + b.dataset.id, { method: 'DELETE' }); await loadCards(); }
+    catch (e) { showMsg(e.message, 'err'); }
+  });
+  toggleNewCard();
+}
+function toggleNewCard() { $('newCardBox').style.display = method === 'new' ? '' : 'none'; }
+
+// ---------- Tap Card SDK ----------
+let unmount = null;
+function mountCardSdk() {
+  if (!window.CardSDK) { showMsg('Tap Card SDK failed to load.', 'err'); return; }
+  if (!cfg.publicKey) { showMsg('TAP_PUBLIC_KEY is not set in .env', 'err'); return; }
+  const { renderTapCard, Currencies, Locale, Theme, Edges, Direction } = window.CardSDK;
+  if (unmount) { try { unmount(); } catch {} }
+  cardReady = false; updatePayBtn();
+  ({ unmount } = renderTapCard('card-sdk-id', {
+    publicKey: cfg.publicKey,
+    merchant: { id: cfg.merchantId },
+    transaction: { amount: selected ? selected.price : 1, currency: (Currencies && Currencies[cfg.currency]) || cfg.currency },
+    customer: {
+      id: cfg.customerId,
+      nameOnCard: `${cfg.customer.first_name} ${cfg.customer.last_name}`,
+      editable: true,
+      contact: { email: cfg.customer.email, phone: { countryCode: cfg.customer.phone.country_code, number: cfg.customer.phone.number } },
+    },
+    acceptance: { supportedBrands: ['VISA', 'MASTERCARD', 'AMERICAN_EXPRESS', 'MADA'], supportedCards: 'ALL' },
+    fields: { cardHolder: true },
+    addons: { displayPaymentBrands: true, loader: true, saveCard: false }, // we use our own "save card" checkbox
+    interface: { locale: Locale.EN, theme: Theme.LIGHT, edges: Edges.CURVED, direction: Direction.LTR },
+    onReady: () => {},
+    onValidInput: () => { cardReady = true; updatePayBtn(); },
+    onInvalidInput: () => { cardReady = false; updatePayBtn(); },
+    onError: (err) => { busy = false; updatePayBtn(); showMsg('Card error: ' + (err && (err.message || JSON.stringify(err))), 'err'); },
+    onSuccess: (token) => pay({ tokenId: token.id, saveCard: $('saveCard').checked }),
+  }));
+}
+
+// ---------- pay ----------
+function updatePayBtn() {
+  const ok = selected && !busy && (method !== 'new' || cardReady);
+  $('payBtn').disabled = !ok;
+  $('payBtn').textContent = busy ? 'Processing…' : selected ? `Pay ${money(selected.price)}` : 'Pay';
+}
+$('payBtn').onclick = () => {
+  busy = true; updatePayBtn(); showMsg('');
+  if (method === 'new') window.CardSDK.tokenize(); // -> onSuccess(token) -> pay()
+  else pay({ cardId: method });
+};
+async function pay(source) {
+  try {
+    const r = await api('/api/pay', { method: 'POST', body: JSON.stringify({ productId: selected.id, ...source }) });
+    if (r.redirectUrl) { showMsg('Redirecting to 3-D Secure…'); location.href = r.redirectUrl; return; }
+    location.href = '/result.html?tap_id=' + encodeURIComponent(r.charge.id);
+  } catch (e) {
+    busy = false; updatePayBtn(); showMsg(e.message, 'err');
+  }
+}
+
+// ---------- orders ----------
+async function loadOrders() {
+  const orders = await api('/api/orders').catch(() => []);
+  if (!orders.length) return;
+  $('orders').innerHTML = '<tr><th>Date</th><th>Product</th><th>Amount</th><th>Charge</th><th>Status</th></tr>' +
+    orders.map(o => `<tr><td>${new Date(o.at).toLocaleString()}</td><td>${o.product}</td><td>${money(o.amount)}</td>
+      <td><a href="/result.html?tap_id=${o.chargeId}">${o.chargeId}</a></td><td class="status ${o.status}">${o.status}</td></tr>`).join('');
+}
+
+// copy test card numbers
+document.querySelectorAll('code').forEach(c => c.onclick = () => navigator.clipboard && navigator.clipboard.writeText(c.textContent));
+
+(async function init() {
+  try { cfg = await api('/api/config'); }
+  catch (e) { showMsg(e.message, 'err'); return; }
+  renderProducts();
+  selectProduct(cfg.products[0].id);
+  await loadCards();
+  loadOrders();
+})();
+</script>
+</body>
+</html>
