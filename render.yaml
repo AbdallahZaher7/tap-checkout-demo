@@ -1,0 +1,17 @@
+# Render Blueprint: New + > Blueprint > pick this repo. Render asks for the keys below.
+services:
+  - type: web
+    name: tap-checkout-demo
+    runtime: node
+    plan: free
+    buildCommand: echo "no build needed"
+    startCommand: node server.js
+    envVars:
+      - key: TAP_SECRET_KEY
+        sync: false
+      - key: TAP_PUBLIC_KEY
+        sync: false
+      - key: TAP_MERCHANT_ID
+        sync: false
+      - key: CURRENCY
+        value: KWD
