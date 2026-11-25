@@ -2,10 +2,7 @@
   "name": "tap-checkout-demo",
   "version": "1.0.0",
   "private": true,
-  "description": "Simple end-to-end Tap Payments checkout with test cards and saved cards",
-  "scripts": {
-    "start": "node server.js"
-  },
+  "description": "Simple end-to-end Tap Payments checkout with test cards and saved cards (Vercel)",
   "engines": {
     "node": ">=18"
   }
