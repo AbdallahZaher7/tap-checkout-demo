@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payment Result</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header><b>🛒 Demo Shop</b><span class="tag">Tap TEST mode</span></header>
+<main style="grid-template-columns:1fr; max-width:520px">
+  <div class="panel" style="text-align:center">
+    <div id="icon" style="font-size:48px">⏳</div>
+    <h2 id="title">Checking your payment…</h2>
+    <div id="details" class="muted"></div>
+    <button class="pay" onclick="location.href='/'">Back to shop</button>
+  </div>
+</main>
+<script>
+// Tap sends the shopper back here as /result.html?tap_id=chg_xxx after 3-D Secure.
+// We never trust the URL alone: the server fetches the charge from Tap to get the real status.
+(async () => {
+  const id = new URLSearchParams(location.search).get('tap_id');
+  const set = (icon, title, html) => { icon && (document.getElementById('icon').textContent = icon); document.getElementById('title').textContent = title; document.getElementById('details').innerHTML = html || ''; };
+  if (!id) return set('❓', 'No payment reference found');
+  try {
+    const res = await fetch('/api/charges/' + encodeURIComponent(id));
+    const c = await res.json();
+    if (!res.ok) throw new Error(c.error);
+    const ok = c.status === 'CAPTURED';
+    set(ok ? '✅' : '❌', ok ? 'Payment successful' : `Payment ${c.status.toLowerCase()}`,
+      `<p><b>${c.description || ''}</b> — ${Number(c.amount).toFixed(3)} ${c.currency}</p>
+       <p>Charge: <code>${c.id}</code><br>Status: <span class="status ${c.status}">${c.status}</span></p>
+       ${c.response ? `<p>${c.response.code} – ${c.response.message}</p>` : ''}
+       ${c.card ? `<p>Card: ${c.card.brand || ''} •••• ${c.card.last_four || ''}</p>` : ''}
+       ${ok && c.save_card && c.card && c.card.id ? '<p>💾 Card saved — it will appear under “Saved cards” on your next purchase.</p>' : ''}`);
+  } catch (e) { set('⚠️', 'Could not verify payment', e.message); }
+})();
+</script>
+</body>
+</html>
