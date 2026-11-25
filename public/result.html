@@ -28,6 +28,12 @@
     const c = await res.json();
     if (!res.ok) throw new Error(c.error);
     const ok = c.status === 'CAPTURED';
+    // Update this order's status in the browser's order list.
+    try {
+      const orders = JSON.parse(localStorage.getItem('tapOrders') || '[]');
+      const o = orders.find(o => o.chargeId === c.id);
+      if (o) { o.status = c.status; localStorage.setItem('tapOrders', JSON.stringify(orders)); }
+    } catch {}
     set(ok ? '✅' : '❌', ok ? 'Payment successful' : `Payment ${c.status.toLowerCase()}`,
       `<p><b>${c.description || ''}</b> — ${Number(c.amount).toFixed(3)} ${c.currency}</p>
        <p>Charge: <code>${c.id}</code><br>Status: <span class="status ${c.status}">${c.status}</span></p>
