@@ -64,6 +64,12 @@ async function api(path, opts = {}) {
   return data;
 }
 const money = (n) => `${Number(n).toFixed(3)} ${cfg.currency}`;
+// Browser storage: this browser's Tap customer id + its recent orders (the server keeps no files).
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const cid = () => encodeURIComponent(cfg.customerId);
 function showMsg(text, kind = '') { $('msg').textContent = text; $('msg').className = 'msg ' + kind; }
 
 // ---------- products ----------
@@ -84,7 +90,7 @@ function selectProduct(id) {
 
 // ---------- saved cards ----------
 async function loadCards() {
-  try { cards = await api('/api/cards'); } catch (e) { cards = []; showMsg('Could not load saved cards: ' + e.message, 'err'); }
+  try { cards = await api('/api/cards?customerId=' + cid()); } catch (e) { cards = []; showMsg('Could not load saved cards: ' + e.message, 'err'); }
   if (method !== 'new' && !cards.find(c => c.id === method)) method = 'new';
   renderMethods();
 }
@@ -99,7 +105,7 @@ function renderMethods() {
   document.querySelectorAll('.del').forEach(b => b.onclick = async (ev) => {
     ev.preventDefault();
     if (!confirm('Remove this saved card?')) return;
-    try { await api('/api/cards/' + b.dataset.id, { method: 'DELETE' }); await loadCards(); }
+    try { await api('/api/cards/' + b.dataset.id + '?customerId=' + cid(), { method: 'DELETE' }); await loadCards(); }
     catch (e) { showMsg(e.message, 'err'); }
   });
   toggleNewCard();
@@ -110,7 +116,7 @@ function toggleNewCard() { $('newCardBox').style.display = method === 'new' ? ''
 let unmount = null;
 function mountCardSdk() {
   if (!window.CardSDK) { showMsg('Tap Card SDK failed to load.', 'err'); return; }
-  if (!cfg.publicKey) { showMsg('TAP_PUBLIC_KEY is not set in .env', 'err'); return; }
+  if (!cfg.publicKey) { showMsg('TAP_PUBLIC_KEY is not set in the Vercel project settings', 'err'); return; }
   const { renderTapCard, Currencies, Locale, Theme, Edges, Direction } = window.CardSDK;
   if (unmount) { try { unmount(); } catch {} }
   cardReady = false; updatePayBtn();
@@ -149,7 +155,10 @@ $('payBtn').onclick = () => {
 };
 async function pay(source) {
   try {
-    const r = await api('/api/pay', { method: 'POST', body: JSON.stringify({ productId: selected.id, ...source }) });
+    const r = await api('/api/pay', { method: 'POST', body: JSON.stringify({ productId: selected.id, customerId: cfg.customerId, ...source }) });
+    const chargeId = r.chargeId || (r.charge && r.charge.id);
+    store.set('tapOrders', [{ chargeId, product: selected.name, amount: selected.price, status: r.charge ? r.charge.status : 'INITIATED', at: new Date().toISOString() },
+      ...store.get('tapOrders', [])].slice(0, 10));
     if (r.redirectUrl) { showMsg('Redirecting to 3-D Secure…'); location.href = r.redirectUrl; return; }
     location.href = '/result.html?tap_id=' + encodeURIComponent(r.charge.id);
   } catch (e) {
@@ -158,8 +167,8 @@ async function pay(source) {
 }
 
 // ---------- orders ----------
-async function loadOrders() {
-  const orders = await api('/api/orders').catch(() => []);
+function loadOrders() {
+  const orders = store.get('tapOrders', []);
   if (!orders.length) return;
   $('orders').innerHTML = '<tr><th>Date</th><th>Product</th><th>Amount</th><th>Charge</th><th>Status</th></tr>' +
     orders.map(o => `<tr><td>${new Date(o.at).toLocaleString()}</td><td>${o.product}</td><td>${money(o.amount)}</td>
@@ -170,8 +179,10 @@ async function loadOrders() {
 document.querySelectorAll('code').forEach(c => c.onclick = () => navigator.clipboard && navigator.clipboard.writeText(c.textContent));
 
 (async function init() {
-  try { cfg = await api('/api/config'); }
+  const savedCustomer = store.get('tapCustomerId', '');
+  try { cfg = await api('/api/config' + (savedCustomer ? '?customerId=' + encodeURIComponent(savedCustomer) : '')); }
   catch (e) { showMsg(e.message, 'err'); return; }
+  store.set('tapCustomerId', cfg.customerId);
   renderProducts();
   selectProduct(cfg.products[0].id);
   await loadCards();
