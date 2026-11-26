@@ -5,7 +5,7 @@ const TAP_API = 'https://api.tap.company/v2';
 const TAP_SECRET_KEY = process.env.TAP_SECRET_KEY || '';
 const TAP_PUBLIC_KEY = process.env.TAP_PUBLIC_KEY || '';
 const TAP_MERCHANT_ID = process.env.TAP_MERCHANT_ID || '';
-const CURRENCY = process.env.CURRENCY || 'KWD';
+const CURRENCY = process.env.CURRENCY || 'EGP';
 
 // Demo shopper. Tap needs a phone number to save cards.
 const DEMO_CUSTOMER = {
