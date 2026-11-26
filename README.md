@@ -38,7 +38,7 @@ No npm packages and no build step.
 
 ## Test cards
 Expiry `01/39` + CVV `100` = approved; expiry `05/22` = declined.
-VISA `4012000033330026` (no 3DS), MC `5123450000000008` (3DS), MC `5111111111111118` (no 3DS).
+VISA `4012000033330026` (no 3DS), VISA `4440000009900010` (3DS), VISA `4440000042200014` (3DS), VISA `4440000042200022` (3DS), MC `5123450000000008` (3DS), MC `5111111111111118` (no 3DS).
 
 ## Notes
 - The secret key stays on the server; the page only gets the public key.
