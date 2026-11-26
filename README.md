@@ -22,7 +22,7 @@ No npm packages and no build step.
    - `TAP_SECRET_KEY` – test secret key (`sk_test_…`) from the Tap dashboard → goSell → API Credentials
    - `TAP_PUBLIC_KEY` – test public key (`pk_test_…`)
    - `TAP_MERCHANT_ID` – your Tap merchant id
-   - Optional: `CURRENCY` (default `KWD`), `BASE_URL` (default: the site's own address), `TAP_CUSTOMER_ID` (use one fixed Tap customer for every visitor)
+   - Optional: `CURRENCY` (default `EGP`), `BASE_URL` (default: the site's own address), `TAP_CUSTOMER_ID` (use one fixed Tap customer for every visitor)
 4. Every push to `main` redeploys automatically. After changing environment variables, redeploy from the Vercel dashboard.
 
 ## Flow
