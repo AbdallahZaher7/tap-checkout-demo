@@ -62,7 +62,9 @@ async function api(path, opts = {}) {
   if (!res.ok) throw new Error(data.error || res.statusText);
   return data;
 }
-const money = (n) => `${Number(n).toFixed(3)} ${cfg.currency}`;
+// KWD, BHD, OMR and JOD use 3 decimal places; EGP and most others use 2.
+const decimals = (c) => (['KWD', 'BHD', 'OMR', 'JOD'].includes(c) ? 3 : 2);
+const money = (n) => `${Number(n).toFixed(decimals(cfg.currency))} ${cfg.currency}`;
 // Browser storage: this browser's Tap customer id + its recent orders (the server keeps no files).
 const store = {
   get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
