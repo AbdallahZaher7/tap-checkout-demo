@@ -35,7 +35,7 @@
       if (o) { o.status = c.status; localStorage.setItem('tapOrders', JSON.stringify(orders)); }
     } catch {}
     set(ok ? '✅' : '❌', ok ? 'Payment successful' : `Payment ${c.status.toLowerCase()}`,
-      `<p><b>${c.description || ''}</b> — ${Number(c.amount).toFixed(3)} ${c.currency}</p>
+      `<p><b>${c.description || ''}</b> — ${Number(c.amount).toFixed(['KWD', 'BHD', 'OMR', 'JOD'].includes(c.currency) ? 3 : 2)} ${c.currency}</p>
        <p>Charge: <code>${c.id}</code><br>Status: <span class="status ${c.status}">${c.status}</span></p>
        ${c.response ? `<p>${c.response.code} – ${c.response.message}</p>` : ''}
        ${c.card ? `<p>Card: ${c.card.brand || ''} •••• ${c.card.last_four || ''}</p>` : ''}
