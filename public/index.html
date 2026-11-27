@@ -57,7 +57,7 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
-let cfg, selected = null, cards = [], method = 'new', cardReady = false, busy = false;
+let cfg, selected = null, cards = [], method = 'new', busy = false;
 
 async function api(path, opts = {}) {
   const res = await fetch(path, { headers: { 'content-type': 'application/json' }, ...opts });
@@ -123,7 +123,7 @@ function mountCardSdk() {
   if (!cfg.publicKey) { showMsg('TAP_PUBLIC_KEY is not set in the Vercel project settings', 'err'); return; }
   const { renderTapCard, Currencies, Locale, Theme, Edges, Direction } = window.CardSDK;
   if (unmount) { try { unmount(); } catch {} }
-  cardReady = false; updatePayBtn();
+  updatePayBtn();
   ({ unmount } = renderTapCard('card-sdk-id', {
     publicKey: cfg.publicKey,
     merchant: { id: cfg.merchantId },
@@ -139,8 +139,6 @@ function mountCardSdk() {
     addons: { displayPaymentBrands: true, loader: true, saveCard: false }, // we use our own "save card" checkbox
     interface: { locale: Locale.EN, theme: Theme.LIGHT, edges: Edges.CURVED, direction: Direction.LTR },
     onReady: () => {},
-    onValidInput: () => { cardReady = true; updatePayBtn(); },
-    onInvalidInput: () => { cardReady = false; updatePayBtn(); },
     onError: (err) => { clearTimeout(tokenTimer); busy = false; updatePayBtn(); showMsg('Card error: ' + (err && (err.message || JSON.stringify(err))), 'err'); },
     onSuccess: (token) => pay({ tokenId: token.id, saveCard: $('saveCard').checked }),
   }));
