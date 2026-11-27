@@ -1,6 +1,7 @@
 // Tap Payments demo checkout - one Vercel serverless function for every /api/* route.
 // vercel.json rewrites /api/<path> -> /api/index?path=<path>.
 // Keeps the SECRET key on the server; the browser only ever sees the PUBLIC key.
+const crypto = require('crypto');
 const TAP_API = 'https://api.tap.company/v2';
 const TAP_SECRET_KEY = process.env.TAP_SECRET_KEY || '';
 const TAP_PUBLIC_KEY = process.env.TAP_PUBLIC_KEY || '';
@@ -12,7 +13,7 @@ const DEMO_CUSTOMER = {
   first_name: 'Test',
   last_name: 'Shopper',
   email: 'test.shopper@example.com',
-  phone: { country_code: '965', number: '51234567' },
+  phone: { country_code: '20', number: '1012345678' }, // Egypt (+20), to match EGP
 };
 
 const PRODUCTS = [
@@ -22,6 +23,8 @@ const PRODUCTS = [
 ];
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
+// KWD, BHD, OMR and JOD use 3 decimal places; EGP and most others use 2.
+const decimals = (c) => (['KWD', 'BHD', 'OMR', 'JOD'].includes(c) ? 3 : 2);
 
 async function tap(method, url, body) {
   const res = await fetch(TAP_API + url, {
@@ -70,6 +73,17 @@ function summarizeCharge(c) {
     card: c.card ? { id: c.card.id, brand: c.card.brand, last_four: c.card.last_four } : null,
     save_card: c.save_card,
   };
+}
+
+// Tap signs every webhook: an HMAC-SHA256 of key charge fields, keyed with our secret key, in the "hashstring" header.
+function validWebhookSignature(req, c) {
+  const received = String(req.headers.hashstring || '');
+  const ref = c.reference || {};
+  const text = `x_id${c.id}x_amount${Number(c.amount).toFixed(decimals(c.currency))}x_currency${c.currency}`
+    + `x_gateway_reference${ref.gateway || ''}x_payment_reference${ref.payment || ''}`
+    + `x_status${c.status}x_created${(c.transaction && c.transaction.created) || ''}`;
+  const expected = crypto.createHmac('sha256', TAP_SECRET_KEY).update(text).digest('hex');
+  return received.length === expected.length && crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
 }
 
 function siteUrl(req) {
@@ -157,7 +171,12 @@ async function handle(req, path) {
   }
 
   if (req.method === 'POST' && path === 'webhook') {
-    console.log('Tap webhook:', body.id, body.status);
+    if (!/^chg_[A-Za-z0-9_]+$/.test(String(body.id)) || !validWebhookSignature(req, body)) {
+      throw httpError(401, 'Invalid webhook signature');
+    }
+    // The signature proves Tap sent it; still read the charge back from Tap instead of trusting the message.
+    const charge = await tap('GET', `/charges/${body.id}`);
+    console.log('Tap webhook (verified):', charge.id, charge.status);
     return { received: true };
   }
 
@@ -171,7 +190,7 @@ module.exports = async (req, res) => {
     res.end(JSON.stringify(obj));
   };
   const path = String((req.query && req.query.path) || '').replace(/^\/+|\/+$/g, '');
-  if (!TAP_SECRET_KEY && path !== 'webhook') {
+  if (!TAP_SECRET_KEY) {
     return send(500, { error: 'TAP_SECRET_KEY is not set in the Vercel project settings.' });
   }
   try {
