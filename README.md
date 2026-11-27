@@ -34,7 +34,7 @@ No npm packages and no build step.
 | Saved cards | `GET /api/cards?customerId=` | `GET /v2/card/{customer_id}` |
 | Pay with saved card | choose the card, click Pay | `POST /v2/tokens` `{saved_card:{card_id, customer_id}}` → `POST /v2/charges` |
 | Remove card | Remove | `DELETE /v2/card/{customer_id}/{card_id}` |
-| Webhook | – | Tap calls `POST /api/webhook` (logged in Vercel's function logs) |
+| Webhook | – | Tap calls `POST /api/webhook`; the server checks its `hashstring` signature, re-reads the charge with `GET /v2/charges/{id}`, and logs it in Vercel's function logs |
 
 ## Test cards
 Expiry `01/39` + CVV `100` = approved; expiry `05/22` = declined.
